@@ -1,0 +1,38 @@
+cmake_minimum_required(VERSION 3.12)
+
+project(lbm VERSION 1.0
+  DESCRIPTION "LBM"
+  LANGUAGES C)
+
+set(default_build_type "Release")
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Setting build type to '${default_build_type}' as none was specified.")
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+    STRING "Choose the type of build." FORCE)
+endif()
+set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+  "Debug" "Release" "MinSizeRel" "RelWithDebInfo" "Benchmark")
+
+set(CMAKE_MODULE_PATH "${lbm_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
+set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
+
+add_subdirectory(${lbm_SOURCE_DIR}/src)
+
+set(CPACK_PACKAGE_VENDOR "Maxime Schmitt")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY ${PROJECT_DESCRIPTION})
+set(CPACK_PACKAGE_DESCRIPTION_FILE "${lbm_SOURCE_DIR}/README.md")
+set(CPACK_PACKAGE_EXECUTABLES "lbm")
+set(CPACK_PACKAGE_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
+set(CPACK_PACKAGE_VERSION_MINOR ${PROJECT_VERSION_MINOR})
+set(CPACK_PACKAGE_VERSION_PATCH ${PROJECT_VERSION_PATCH})
+set(CPACK_GENERATOR "TGZ;TBZ2;ZIP")
+SET(CPACK_PACKAGE_INSTALL_DIRECTORY "lbm ${lbm_VERSION}")
+set(CPACK_RESOURCE_FILE_LICENSE "${lbm_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README "${lbm_SOURCE_DIR}/README.md")
+set(CPACK_SOURCE_GENERATOR "TGZ;TBZ2;ZIP")
+set(CPACK_SOURCE_IGNORE_FILES
+  .git*
+  /.*build.*
+  )
+include(CPack)
