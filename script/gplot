@@ -1,0 +1,9 @@
+set term pdf size 15cm,4cm
+set output 'gridData.dat.pdf'
+load 'plasma.pal'
+set autoscale xfix
+set autoscale yfix
+set autoscale cbfix
+set cblabel 'Fluid Speed' font ',16'
+set size nosquare
+plot 'gridData.dat' matrix nonuniform with image notitle
