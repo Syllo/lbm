@@ -32,6 +32,7 @@
 #ifndef D2Q9__H_
 #define D2Q9__H_
 
+#include <stdbool.h>
 #include <stdio.h>
 
 // simple class for solving the 2d navier-stokes equation
@@ -99,10 +100,12 @@ void imposed_data(double x, double y, double t, double *w, d2q9 *lbm);
 extern d2q9 d2q9_null;
 
 // constructor
-void d2q9_init(double Lx, size_t nx, size_t ny, double Rc, double Dx, d2q9 *lbm);
+void d2q9_init(double Lx, size_t nx, size_t ny, double Rc, double Dx,
+               d2q9 *lbm);
 
 // compute w[3] from f[9]
-inline void kin_to_fluid(const double *restrict f, double *restrict w, d2q9 *lbm) {
+inline void kin_to_fluid(const double *restrict f, double *restrict w,
+                         d2q9 *lbm) {
 
   w[0] = 0;
   w[1] = 0;
@@ -131,10 +134,10 @@ void d2q9_boundary(d2q9 *lbm);
 // performs one time step of the LBM algorithm
 void d2q9_step(d2q9 *lbm);
 // and all the steps
-void d2q9_solve(d2q9 *lbm, double tmax);
+void d2q9_solve(d2q9 *lbm, double tmax, bool verbose);
 
 // display the results iv (iv=0 -> rho,
 // iv=1 -> rho * u, iv=2 -> rho * v, iv=3 -> sqrt(u*u+v*v))
-void d2q9_dump(FILE* out, d2q9 *lbm, int var);
+void d2q9_dump(FILE *out, d2q9 *lbm, int var);
 
 #endif // D2Q9__H_

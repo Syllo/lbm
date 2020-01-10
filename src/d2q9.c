@@ -218,7 +218,7 @@ void d2q9_boundary(d2q9 *lbm) {
   }
 }
 
-void d2q9_solve(d2q9 *lbm, double tmax) {
+void d2q9_solve(d2q9 *lbm, double tmax, bool verbose) {
   lbm->tmax = tmax;
   double local_tnow = lbm->tnow;
   const double dt = lbm->dx / lbm->smax;
@@ -230,7 +230,8 @@ void d2q9_solve(d2q9 *lbm, double tmax) {
   tstart_chunk = omp_get_wtime();
 #endif
 #pragma omp parallel default(none)                                             \
-    shared(lbm, tmax, tstart_chunk, dt, inter_print) firstprivate(local_tnow)
+    shared(lbm, tmax, tstart_chunk, dt, inter_print, verbose)                  \
+        firstprivate(local_tnow)
   {
     size_t iter_count = 1;
     unsigned percentage = 10u;
@@ -239,7 +240,7 @@ void d2q9_solve(d2q9 *lbm, double tmax) {
       d2q9_step(lbm);
 #pragma omp single nowait
       lbm->tnow += dt;
-      if (!iter_count) {
+      if (verbose && !iter_count) {
 #ifdef _OPENMP
 #pragma omp master
         {
@@ -259,17 +260,19 @@ void d2q9_solve(d2q9 *lbm, double tmax) {
       iter_count = iter_count == inter_print ? 0 : iter_count + 1;
       local_tnow += dt;
     }
+    if (verbose) {
 #ifdef _OPENMP
 #pragma omp master
-    {
-      double tend_chunk = omp_get_wtime();
-      printf("100%% -- t=%f dt=%f tmax=%f (%zu iter in %.3fs)\n", lbm->tnow, dt,
-             lbm->tmax, inter_print, tend_chunk - tstart_chunk);
-      tstart_chunk = tend_chunk;
-    }
+      {
+        double tend_chunk = omp_get_wtime();
+        printf("100%% -- t=%f dt=%f tmax=%f (%zu iter in %.3fs)\n", lbm->tnow,
+               dt, lbm->tmax, inter_print, tend_chunk - tstart_chunk);
+        tstart_chunk = tend_chunk;
+      }
 #else
-    printf("100%% -- t=%f dt=%f tmax=%f\n", lbm->tnow, dt, lbm->tmax);
+      printf("100%% -- t=%f dt=%f tmax=%f\n", lbm->tnow, dt, lbm->tmax);
 #endif
+    }
   }
 }
 

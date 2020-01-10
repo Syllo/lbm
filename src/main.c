@@ -30,6 +30,7 @@
  */
 
 #include "d2q9.h"
+#include "time_measurement.h"
 #include <getopt.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -43,9 +44,10 @@ static struct option opt_options[] = {
     {"cylinder-radius", required_argument, 0, 'r'},
     {"cylinder-right-shift", required_argument, 0, 's'},
     {"help", no_argument, 0, 'h'},
+    {"quiet", no_argument, 0, 'q'},
     {0, 0, 0, 0}};
 
-static const char options[] = ":l:x:y:o:t:r:s:h";
+static const char options[] = ":l:x:y:o:t:r:s:hq";
 
 static const char help_string[] =
     "Options:"
@@ -84,6 +86,7 @@ int main(int argc, char **argv) {
   double Dx = _DX;
   char *output_filename = NULL;
   double tmax = _TMAX;
+  bool verbose = true;
 
   while (true) {
     int sscanf_return;
@@ -91,6 +94,9 @@ int main(int argc, char **argv) {
     if (optchar == -1)
       break;
     switch (optchar) {
+    case 'q':
+      verbose = false;
+      break;
     case 'o':
       if (optarg != NULL && optarg[0] != '-' && optarg[0] != '\0') {
         output_filename = optarg;
@@ -185,7 +191,12 @@ int main(int argc, char **argv) {
   printf("Domain size (%f,%f) [%zu x %zu points] cylinder (%f,%f) radius %f\n",
          lbm.Lx, lbm.Ly, lbm.nx, lbm.ny, lbm.Dx, lbm.Ly / 2., lbm.Rc);
 
-  d2q9_solve(&lbm, tmax);
+  time_measure startTime, endTime;
+  get_current_time(&startTime);
+  d2q9_solve(&lbm, tmax, verbose);
+  get_current_time(&endTime);
+  fprintf(stdout, "Kernel time %.4fs\n",
+          measuring_difftime(startTime, endTime));
   if (output_filename) {
     FILE *out = fopen(output_filename, "w");
     d2q9_dump(out, &lbm, 3);
