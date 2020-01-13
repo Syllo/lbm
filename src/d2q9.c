@@ -30,7 +30,7 @@
  */
 
 #include "d2q9.h"
-
+#include "time_measurement.h"
 #include <assert.h>
 #include <math.h>
 #include <omp.h>
@@ -222,56 +222,51 @@ void d2q9_solve(d2q9 *lbm, double tmax, bool verbose) {
   lbm->tmax = tmax;
   double local_tnow = lbm->tnow;
   const double dt = lbm->dx / lbm->smax;
+
   const double num_iter_d = ceil((tmax - local_tnow) / dt);
-  const size_t num_iter = (size_t)num_iter_d;
-  const size_t inter_print = num_iter / 10 == 0 ? 1 : num_iter / 10;
-#ifdef _OPENMP
-  double tstart_chunk;
-  tstart_chunk = omp_get_wtime();
-#endif
-#pragma omp parallel default(none)                                             \
-    shared(lbm, tmax, tstart_chunk, dt, inter_print, verbose)                  \
-        firstprivate(local_tnow)
+  double print_interval_d;
+  if (num_iter_d >= 10.) {
+    double divide = 1.;
+    do {
+      print_interval_d = ceil(num_iter_d / divide);
+      divide = divide + 1.;
+    } while (num_iter_d / print_interval_d < 10.);
+  } else {
+    print_interval_d = 1.;
+  }
+  const size_t print_interval = (size_t)print_interval_d;
+  const double percent_increment = 100. / (num_iter_d / print_interval_d);
+  const size_t inter_print = print_interval - 1;
+#pragma omp parallel default(none) shared(lbm, tmax, dt, inter_print, verbose, \
+                                          percent_increment, print_interval)   \
+    firstprivate(local_tnow)
   {
-    size_t iter_count = 1;
-    unsigned percentage = 10u;
+    time_measure tstart_chunk;
+    get_current_time(&tstart_chunk);
+    size_t iter_count = 0;
+    double percentage = percent_increment;
 
     while (local_tnow < tmax) {
       d2q9_step(lbm);
+      local_tnow += dt;
 #pragma omp single nowait
       lbm->tnow += dt;
-      if (verbose && !iter_count) {
-#ifdef _OPENMP
+
+      iter_count = iter_count == inter_print ? 0 : iter_count + 1;
+      if (verbose && iter_count == 0) {
 #pragma omp master
         {
-          double tend_chunk = omp_get_wtime();
-          printf("%u%% -- t=%f dt=%f tmax=%f (%zu iter in %.3fs)\n", percentage,
-                 lbm->tnow, dt, lbm->tmax, inter_print,
-                 tend_chunk - tstart_chunk);
+          time_measure tend_chunk;
+          get_current_time(&tend_chunk);
+          double difference = measuring_difftime(tstart_chunk, tend_chunk);
+          printf("%.0f%% -- t=%e dt=%e tend=%e (%zu iter in %.3fs)\n",
+                 percentage, lbm->tnow, dt, lbm->tmax, print_interval,
+                 difference);
+          percentage += percent_increment;
           tstart_chunk = tend_chunk;
         }
-#else
-        printf("%u%% -- t=%f dt=%f tmax=%f\n", percentage, lbm->tnow, dt,
-               lbm->tmax);
-#endif
-        percentage += 10u;
       }
 #pragma omp barrier
-      iter_count = iter_count == inter_print ? 0 : iter_count + 1;
-      local_tnow += dt;
-    }
-    if (verbose) {
-#ifdef _OPENMP
-#pragma omp master
-      {
-        double tend_chunk = omp_get_wtime();
-        printf("100%% -- t=%f dt=%f tmax=%f (%zu iter in %.3fs)\n", lbm->tnow,
-               dt, lbm->tmax, inter_print, tend_chunk - tstart_chunk);
-        tstart_chunk = tend_chunk;
-      }
-#else
-      printf("100%% -- t=%f dt=%f tmax=%f\n", lbm->tnow, dt, lbm->tmax);
-#endif
     }
   }
 }
