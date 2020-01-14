@@ -33,7 +33,6 @@
 #include "time_measurement.h"
 #include <assert.h>
 #include <math.h>
-#include <omp.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -151,7 +150,6 @@ void d2q9_shift(d2q9 *lbm) {
   VLA_3D_definition(9, lbm->nx, lbm->ny, f_, lbm->f);
   VLA_3D_definition(9, lbm->nx, lbm->ny, fnext_, lbm->fnext);
   for (size_t k = 0; k < 9; k++) {
-#pragma omp for schedule(static) nowait
     for (size_t i = 0; i < lbm->nx; i++) {
       size_t i2 = (lbm->nx + i - (size_t)lbm->vel[k][0]) % lbm->nx;
       for (size_t j = 0; j < lbm->ny; j++) {
@@ -170,12 +168,38 @@ void d2q9_step(d2q9 *lbm) {
   d2q9_boundary(lbm);
 }
 
+extern double rand_skip_percent;
+extern bool sort_skip;
+
+struct dataPosDeviation {
+  double vals[9];
+  double error;
+  size_t posX, posY;
+};
+
+static int compareDeviation(const void *a, const void *b) {
+  const struct dataPosDeviation *data1 = (const struct dataPosDeviation *)a;
+  const struct dataPosDeviation *data2 = (const struct dataPosDeviation *)b;
+  if (data1->error < data2->error) {
+    return -1;
+  } else {
+    if (data1->error > data2->error) {
+      return 1;
+    } else {
+      return 0;
+    }
+  }
+}
+
 void d2q9_relax(d2q9 *lbm) {
 
   VLA_3D_definition(9, lbm->nx, lbm->ny, f_, lbm->f);
   VLA_3D_definition(9, lbm->nx, lbm->ny, fnext_, lbm->fnext);
   VLA_3D_definition(3, lbm->nx, lbm->ny, w_, lbm->w);
-#pragma omp for schedule(static) nowait
+
+  struct dataPosDeviation(*dpd)[lbm->ny] =
+      malloc(sizeof(struct dataPosDeviation[lbm->nx][lbm->ny]));
+
   for (size_t i = 0; i < lbm->nx; i++) {
     for (size_t j = 0; j < lbm->ny; j++) {
       double f[9];
@@ -190,17 +214,48 @@ void d2q9_relax(d2q9 *lbm) {
         // printf("u=%f\n",w[1]/w[0]);
       }
       fluid_to_kin(w, feq, lbm);
+      if (sort_skip) {
+        dpd[i][j].error = 0.;
+        dpd[i][j].posX = i;
+        dpd[i][j].posY = j;
+      }
       for (size_t k = 0; k < 9; k++) {
-        f_[k][i][j] = _RELAX * feq[k] + (1 - _RELAX) * fnext_[k][i][j];
+        if (sort_skip) {
+          dpd[i][j].vals[k] = f_[k][i][j];
+        }
+        if (sort_skip || drand48() >= rand_skip_percent) {
+          f_[k][i][j] = _RELAX * feq[k] + (1 - _RELAX) * fnext_[k][i][j];
+        }
+        if (sort_skip) {
+          double error = f_[k][i][j] - dpd[i][j].vals[k];
+          error *= error;
+          dpd[i][j].error += error;
+        }
       }
     }
   }
+  if (sort_skip) {
+    qsort(dpd, (lbm->nx) * (lbm->ny), sizeof(struct dataPosDeviation),
+          compareDeviation);
+    double threshold_d = ceil(((lbm->nx) * (lbm->ny)) * rand_skip_percent);
+    size_t threshold = (size_t)threshold_d;
+    size_t whereAmI = 0;
+    for (size_t i = 0; whereAmI < threshold && i < lbm->nx; ++i) {
+      for (size_t j = 0; whereAmI < threshold && j < lbm->ny; ++j, whereAmI++) {
+        // simulate skipping the computation for the values that have lowest
+        // update derivative
+        for (size_t k = 0; k < 9; k++) {
+          f_[k][dpd[i][j].posX][dpd[i][j].posY] = dpd[i][j].vals[k];
+        }
+      }
+    }
+  }
+  free(dpd);
 }
 
 void d2q9_boundary(d2q9 *lbm) {
 
   VLA_3D_definition(9, lbm->nx, lbm->ny, f_, lbm->f);
-#pragma omp for schedule(static) nowait
   for (size_t i = 0; i < lbm->nx; i++) {
     for (size_t j = 0; j < lbm->ny; j++) {
       double x = (double)i * lbm->dx;
@@ -237,9 +292,6 @@ void d2q9_solve(d2q9 *lbm, double tmax, bool verbose) {
   const size_t print_interval = (size_t)print_interval_d;
   const double percent_increment = 100. / (num_iter_d / print_interval_d);
   const size_t inter_print = print_interval - 1;
-#pragma omp parallel default(none) shared(lbm, tmax, dt, inter_print, verbose, \
-                                          percent_increment, print_interval)   \
-    firstprivate(local_tnow)
   {
     time_measure tstart_chunk;
     get_current_time(&tstart_chunk);
@@ -249,12 +301,10 @@ void d2q9_solve(d2q9 *lbm, double tmax, bool verbose) {
     while (local_tnow < tmax) {
       d2q9_step(lbm);
       local_tnow += dt;
-#pragma omp single nowait
       lbm->tnow += dt;
 
       iter_count = iter_count == inter_print ? 0 : iter_count + 1;
       if (verbose && iter_count == 0) {
-#pragma omp master
         {
           time_measure tend_chunk;
           get_current_time(&tend_chunk);
@@ -266,7 +316,6 @@ void d2q9_solve(d2q9 *lbm, double tmax, bool verbose) {
           tstart_chunk = tend_chunk;
         }
       }
-#pragma omp barrier
     }
   }
 }
