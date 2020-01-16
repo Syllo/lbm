@@ -170,6 +170,7 @@ void d2q9_step(d2q9 *lbm) {
 
 extern double rand_skip_percent;
 extern bool sort_skip;
+extern bool interpolate;
 
 struct dataPosDeviation {
   double vals[9];
@@ -223,13 +224,32 @@ void d2q9_relax(d2q9 *lbm) {
         if (sort_skip) {
           dpd[i][j].vals[k] = f_[k][i][j];
         }
-        if (sort_skip || drand48() >= rand_skip_percent) {
+        if (sort_skip || interpolate || drand48() >= rand_skip_percent) {
           f_[k][i][j] = _RELAX * feq[k] + (1 - _RELAX) * fnext_[k][i][j];
         }
         if (sort_skip) {
           double error = f_[k][i][j] - dpd[i][j].vals[k];
           error *= error;
           dpd[i][j].error += error;
+        }
+      }
+    }
+  }
+  if (interpolate) {
+    for (size_t i = 1; i < lbm->nx - 1; i++) {
+      for (size_t j = 1; j < lbm->ny - 1; j++) {
+        if (drand48() < rand_skip_percent) {
+          double w[3];
+          for (size_t k = 0; k < 3; k++) {
+            w[k] = (w_[k][i - 1][j] + w_[k][i + 1][j] + w_[k][i][j - 1] +
+                    w_[k][i][j + 1]) /
+                   4.;
+          }
+          double f[9];
+          fluid_to_kin(w, f, lbm);
+          for (size_t k = 0; k < 9; k++) {
+            f_[k][i][j] = f[k];
+          }
         }
       }
     }

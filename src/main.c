@@ -47,9 +47,10 @@ static struct option opt_options[] = {
     {"quiet", no_argument, 0, 'q'},
     {"rand-skip", required_argument, 0, 'R'},
     {"sort-skip", no_argument, 0, 'S'},
+    {"interpolate", no_argument, 0, 'I'},
     {0, 0, 0, 0}};
 
-static const char options[] = ":l:x:y:o:t:r:s:hqR:S";
+static const char options[] = ":l:x:y:o:t:r:s:hqR:SI";
 
 static const char help_string[] =
     "Options:"
@@ -79,6 +80,7 @@ static const char help_string[] =
 
 double rand_skip_percent = 0.;
 bool sort_skip = false;
+bool interpolate = false;
 
 int main(int argc, char **argv) {
 
@@ -181,6 +183,7 @@ int main(int argc, char **argv) {
       printf("Usage: %s <options>\n%s\n", argv[0], help_string);
       return EXIT_SUCCESS;
     case 'R': {
+      srand48(time(NULL));
       sscanf_return = sscanf(optarg, "%lf", &rand_skip_percent);
       if (sscanf_return == EOF || sscanf_return == 0 ||
           rand_skip_percent < 0. || rand_skip_percent > 1.) {
@@ -193,6 +196,9 @@ int main(int argc, char **argv) {
     } break;
     case 'S':
       sort_skip = true;
+      break;
+    case 'I':
+      interpolate = true;
       break;
     case ':':
       fprintf(stderr, "Option %c requires an argument\n", optopt);
