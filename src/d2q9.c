@@ -305,7 +305,7 @@ void fluid_to_kin(const double w[restrict 3], double f[restrict 9], d2q9 *lbm) {
 extern inline void kin_to_fluid(const double *restrict f, double *restrict w,
                                 d2q9 *lbm);
 
-void d2q9_dump(FILE *out, d2q9 *lbm, int var) {
+void d2q9_dump_matrix(FILE *out, d2q9 *lbm, int var) {
   VLA_3D_definition(3, lbm->nx, lbm->ny, w_, lbm->w);
 
   fprintf(out, "%zu ", lbm->nx);
@@ -331,5 +331,26 @@ void d2q9_dump(FILE *out, d2q9 *lbm, int var) {
       fprintf(out, "%.3f ", val * 100.);
     }
     fprintf(out, "\n");
+  }
+}
+
+void d2q9_dump(FILE *out, d2q9 *lbm, int var) {
+  VLA_3D_definition(3, lbm->nx, lbm->ny, w_, lbm->w);
+
+  double posY = 0.;
+  for (size_t j = 0; j < lbm->ny; j++, posY += lbm->dx) {
+    double posX = 0.;
+    for (size_t i = 0; i < lbm->nx; i++, posX += lbm->dx) {
+      double val;
+      if (var < 3) {
+        val = w_[var][i][j];
+      } else {
+        double r = w_[0][i][j];
+        double u = w_[1][i][j] / r;
+        double v = w_[2][i][j] / r;
+        val = sqrt(u * u + v * v);
+      }
+      fprintf(out, "%e %e %e\n", posX, posY, val);
+    }
   }
 }

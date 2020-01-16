@@ -139,5 +139,7 @@ void d2q9_solve(d2q9 *lbm, double tmax, bool verbose);
 // display the results iv (iv=0 -> rho,
 // iv=1 -> rho * u, iv=2 -> rho * v, iv=3 -> sqrt(u*u+v*v))
 void d2q9_dump(FILE *out, d2q9 *lbm, int var);
+// dumps the data as a 2D CSV (but space separated) matrix
+void d2q9_dump_matrix(FILE *out, d2q9 *lbm, int var);
 
 #endif // D2Q9__H_
