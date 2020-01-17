@@ -146,28 +146,6 @@ void d2q9_init(double Lx, size_t nx, size_t ny, double Rc, double Dx,
   }
 }
 
-void d2q9_shift(d2q9 *lbm) {
-  VLA_3D_definition(9, lbm->nx, lbm->ny, f_, lbm->f);
-  VLA_3D_definition(9, lbm->nx, lbm->ny, fnext_, lbm->fnext);
-  for (size_t k = 0; k < 9; k++) {
-    for (size_t i = 0; i < lbm->nx; i++) {
-      size_t i2 = (lbm->nx + i - (size_t)lbm->vel[k][0]) % lbm->nx;
-      for (size_t j = 0; j < lbm->ny; j++) {
-        size_t j2 = (lbm->ny + j - (size_t)lbm->vel[k][1]) % lbm->ny;
-        // printf("j=%d j2=%d\n",j,j2);
-        // assert(j2 >=0 && j2 < lbm->ny);
-        fnext_[k][i][j] = f_[k][i2][j2];
-      }
-    }
-  }
-}
-
-void d2q9_step(d2q9 *lbm) {
-  d2q9_shift(lbm);
-  d2q9_relax(lbm);
-  d2q9_boundary(lbm);
-}
-
 extern double rand_skip_percent;
 extern bool sort_skip;
 extern bool interpolate;
@@ -192,44 +170,29 @@ static int compareDeviation(const void *a, const void *b) {
   }
 }
 
-void d2q9_relax(d2q9 *lbm) {
-
+void d2q9_shift(d2q9 *lbm) {
   VLA_3D_definition(9, lbm->nx, lbm->ny, f_, lbm->f);
   VLA_3D_definition(9, lbm->nx, lbm->ny, fnext_, lbm->fnext);
-  VLA_3D_definition(3, lbm->nx, lbm->ny, w_, lbm->w);
 
   struct dataPosDeviation(*dpd)[lbm->ny] =
-      malloc(sizeof(struct dataPosDeviation[lbm->nx][lbm->ny]));
+      calloc(1, sizeof(struct dataPosDeviation[lbm->nx][lbm->ny]));
 
-  for (size_t i = 0; i < lbm->nx; i++) {
-    for (size_t j = 0; j < lbm->ny; j++) {
-      double f[9];
-      double feq[9];
-      for (size_t k = 0; k < 9; k++) {
-        f[k] = fnext_[k][i][j];
-      }
-      double w[3];
-      kin_to_fluid(f, w, lbm);
-      for (size_t k = 0; k < 3; k++) {
-        w_[k][i][j] = w[k];
-        // printf("u=%f\n",w[1]/w[0]);
-      }
-      fluid_to_kin(w, feq, lbm);
-      if (sort_skip) {
-        dpd[i][j].error = 0.;
-        dpd[i][j].posX = i;
-        dpd[i][j].posY = j;
-      }
-      for (size_t k = 0; k < 9; k++) {
+  for (size_t k = 0; k < 9; k++) {
+    for (size_t i = 0; i < lbm->nx; i++) {
+      size_t i2 = (lbm->nx + i - (size_t)lbm->vel[k][0]) % lbm->nx;
+      for (size_t j = 0; j < lbm->ny; j++) {
+        size_t j2 = (lbm->ny + j - (size_t)lbm->vel[k][1]) % lbm->ny;
         if (sort_skip) {
-          dpd[i][j].vals[k] = f_[k][i][j];
+          dpd[i][j].vals[k] = fnext_[k][i2][j2];
+          dpd[i][j].posX = i;
+          dpd[i][j].posY = j;
         }
-        if (sort_skip || interpolate || drand48() >= rand_skip_percent) {
-          f_[k][i][j] = _RELAX * feq[k] + (1 - _RELAX) * fnext_[k][i][j];
-        }
+        if (!sort_skip && !interpolate && drand48() < rand_skip_percent)
+          continue;
+        fnext_[k][i][j] = f_[k][i2][j2];
         if (sort_skip) {
-          double error = f_[k][i][j] - dpd[i][j].vals[k];
-          error *= error;
+          double error = fnext_[k][i][j] - dpd[i][j].vals[k];
+          error = error * error;
           dpd[i][j].error += error;
         }
       }
@@ -239,16 +202,10 @@ void d2q9_relax(d2q9 *lbm) {
     for (size_t i = 1; i < lbm->nx - 1; i++) {
       for (size_t j = 1; j < lbm->ny - 1; j++) {
         if (drand48() < rand_skip_percent) {
-          double w[3];
-          for (size_t k = 0; k < 3; k++) {
-            w[k] = (w_[k][i - 1][j] + w_[k][i + 1][j] + w_[k][i][j - 1] +
-                    w_[k][i][j + 1]) /
-                   4.;
-          }
-          double f[9];
-          fluid_to_kin(w, f, lbm);
           for (size_t k = 0; k < 9; k++) {
-            f_[k][i][j] = f[k];
+            fnext_[k][i][j] = (fnext_[k][i - 1][j] + fnext_[k][i + 1][j] +
+                               fnext_[k][i][j - 1] + fnext_[k][i][j + 1]) /
+                              4.;
           }
         }
       }
@@ -271,6 +228,39 @@ void d2q9_relax(d2q9 *lbm) {
     }
   }
   free(dpd);
+}
+
+void d2q9_step(d2q9 *lbm) {
+  d2q9_shift(lbm);
+  d2q9_relax(lbm);
+  d2q9_boundary(lbm);
+}
+
+void d2q9_relax(d2q9 *lbm) {
+
+  VLA_3D_definition(9, lbm->nx, lbm->ny, f_, lbm->f);
+  VLA_3D_definition(9, lbm->nx, lbm->ny, fnext_, lbm->fnext);
+  VLA_3D_definition(3, lbm->nx, lbm->ny, w_, lbm->w);
+
+  for (size_t i = 0; i < lbm->nx; i++) {
+    for (size_t j = 0; j < lbm->ny; j++) {
+      double f[9];
+      double feq[9];
+      for (size_t k = 0; k < 9; k++) {
+        f[k] = fnext_[k][i][j];
+      }
+      double w[3];
+      kin_to_fluid(f, w, lbm);
+      for (size_t k = 0; k < 3; k++) {
+        w_[k][i][j] = w[k];
+        // printf("u=%f\n",w[1]/w[0]);
+      }
+      fluid_to_kin(w, feq, lbm);
+      for (size_t k = 0; k < 9; k++) {
+        f_[k][i][j] = _RELAX * feq[k] + (1 - _RELAX) * fnext_[k][i][j];
+      }
+    }
+  }
 }
 
 void d2q9_boundary(d2q9 *lbm) {
